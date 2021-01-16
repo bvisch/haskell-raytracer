@@ -66,7 +66,7 @@ defaultConfig = Config { configNear = near,
                          configWindowWidth = 600, 
                          configWindowHeight = 400,
                          configFov = 460,
-                         configStepsPerSecond = 10, 
+                         configStepsPerSecond = 2, 
                          configBounces = 3, 
                          configZoom = 1 }
     where
@@ -206,14 +206,33 @@ initialWorld = World { worldTime = 0.0,
                        worldLights = lights }
     where
         eye = V4 1.0 2.0 1.0 1.0
-        g = V4 0.0 0.0 0.0 1.0
-        colour1 = colour 125 25 255 255
+        g = V4 0.0 0.0 2.0 1.0
+        colour1 = colour 255 25 80 255
         colour2 = colour 0 0 255 255
-        sphere1Props = Properties 1.0 0.1 0.6 0.2 0.2 colour1 colour1 colour1 10.0
-        planeProps = Properties 1.0 0.2 0.6 0.6 0.6 colour2 colour2 colour2 10.0
-        objects = [sphere sphere1Props (translate 0.0 0.0 0.0),
+        sphere1Props = Properties { propDensity = 1.0,
+                                    propReflectivity = 0.99,
+                                    propSpecCoeff = 0.02,
+                                    propDiffCoeff = 0.68,
+                                    propAmbCoeff = 0.3, 
+                                    propSpecColour = colour1,
+                                    propDiffColour = colour1,
+                                    propAmbColour = colour1,
+                                    propF = 10.0 }
+        planeProps = Properties { propDensity = 1.0,
+                                  propReflectivity = 0.1,
+                                  propSpecCoeff = 0.2,
+                                  propDiffCoeff = 0.4,
+                                  propAmbCoeff = 0.4, 
+                                  propSpecColour = colour2,
+                                  propDiffColour = colour2,
+                                  propAmbColour = colour2,
+                                  propF = 10.0 }
+        objects = [sphere sphere1Props (translate 0.0 0.0 2.0),
+                   sphere sphere1Props (translate 0.0 0.0 (-2.0)),
+                   sphere sphere1Props (translate (-3.0) 0.01 2.0),
                    infPlane planeProps identity]
-        lights = [Light (V4 2.0 2.0 2.0 1.0) (colour 255 255 255 255) (colour 255 255 255 255)]
+        lights = [Light (V4 2.0 2.0 2.0 1.0) (colour 100 100 100 255) (V4 0.1 0.1 0.1 255),
+                  Light (V4 (-2.0) 2.0 2.0 1.0) (colour 100 100 100 255) (V4 0.1 0.1 0.1 255)]
 
 handleEvent :: G.Event -> World -> World
 handleEvent event world
@@ -290,7 +309,7 @@ closestIntersection ray objects = foldr bestHitTime Nothing objectHitTimes
     where
         objectHitTimes = zip objects $ map (getHitTime ray) objects
 
-shadowed :: [Object] -> Ray -> Bool  -- O(n^2) when mapped unless ghc has some magic
+shadowed :: [Object] -> Ray -> Bool 
 shadowed objects ray = any (isJust . getHitTime ray) objects
 
 objectColourUnderLight :: [Object] -> Object -> Point -> Point -> Vec4 -> Light -> Maybe Colour
@@ -313,7 +332,7 @@ objectColourUnderLight objects obj eyeOC intersectionOC normal light = if shadow
         vectorToCenterOfProjection = signorm $ intersectionOC ^-^ eyeOC
         diffuseIntensity = clampUnit . dot normal $ vectorToLight
         specularIntensity = (** objF) . clampUnit $ specularReflection `dot` vectorToCenterOfProjection
-        intersectionWC = (objM !* intersectionOC) ^+^ V4 0.0 0.0 epsilon 0.0
+        intersectionWC = (objM !* intersectionOC) ^+^ (normal ^* epsilon)
         rayToLight = (intersectionWC, (objM !* vectorToLight))
         lightModifier = (lightColour light) * (lightIntensity light)
         colour = lightModifier * ((diffuseIntensity *^ objDiffRGBA) + (specularIntensity *^ objSpecRGBA))
@@ -340,20 +359,20 @@ trace bounces world@(World _ _ _ _ objects lights) ray@(eye, rayDir)
                     intersectionOC = eyeOC ^+^ rayDirOC ^* hitTime
                     normal = (objNormal obj) intersectionOC
                     totalLightColour = sum $ mapMaybe (objectColourUnderLight objects obj eyeOC intersectionOC normal) lights
-                    colourBeforeReflection = (ambCoeff *^ ambRGBA)
+                    colourBeforeReflection = (ambCoeff *^ ambRGBA) ^+^ totalLightColour
 
                     reflectionVector = reflect intersectionOC normal
-                    reflectionVectorWC = objM !* reflectionVector
-                    intersectionWC = (objM !* intersectionOC) ^+^ (reflectionVector ^* epsilon)
+                    reflectionVectorWC = signorm $ objM !* reflectionVector
+                    intersectionWC = (objM !* intersectionOC) ^+^ (reflectionVectorWC ^* epsilon)
                     reflectionColour = trace (bounces + 1) world (intersectionWC, reflectionVectorWC)
 
-                    -- colour = 
-                    --     if objReflectivity > 0.0 then
-                    --         ((1.0 - objReflectivity) *^ colourBeforeReflection) ^+^ (objReflectivity *^ reflectionColour)
-                    --     else
-                    --         colourBeforeReflection
+                    colour = 
+                        if objReflectivity > 0.0 then
+                            ((1.0 - objReflectivity) *^ colourBeforeReflection) ^+^ (objReflectivity *^ reflectionColour)
+                        else
+                            colourBeforeReflection
 
-                    colour = colourBeforeReflection
+                    -- colour = colourBeforeReflection
                 in colour
 
 
@@ -364,7 +383,7 @@ shade world@(World time wWidth wHeight camera objects lights) point@(x, y) = col
         fov = fromIntegral $ configFov defaultConfig
         fovX = fov * aspect
         fovY = fov
-        rayDir = rayDirection world (x * fovX, -y * fovY)
+        rayDir = rayDirection world (x * fovX, y * fovY)
         eye = cameraEye camera
         ray = (eye, rayDir)
         
