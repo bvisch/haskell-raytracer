@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 75ae5fd4f1c57b72861b7556382f7f290a638908a84d2a5cf9d7f2abee163fd3
+-- hash: 9607cbe9a1df5810a46a0bdfcc1ecab8fbe4b4118205af7efd4a0e34b5f4fb0a
 
 name:           haskell-raytracer
 version:        0.1.0.0
@@ -27,13 +27,19 @@ source-repository head
 
 library
   exposed-modules:
+      Config
       Lib
+      Objects
+      Raytrace
+      Types
   other-modules:
       Paths_haskell_raytracer
   hs-source-dirs:
       src
   build-depends:
       base >=4.7 && <5
+    , gloss
+    , linear
   default-language: Haskell2010
 
 executable haskell-raytracer-exe

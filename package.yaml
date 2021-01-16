@@ -24,6 +24,9 @@ dependencies:
 
 library:
   source-dirs: src
+  dependencies:
+    - linear
+    - gloss
 
 executables:
   haskell-raytracer-exe:
