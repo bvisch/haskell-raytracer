@@ -290,70 +290,69 @@ closestIntersection ray objects = foldr bestHitTime Nothing objectHitTimes
     where
         objectHitTimes = zip objects $ map (getHitTime ray) objects
 
-trace :: Int -> World -> G.Point -> Colour
-trace bounces world@(World time wWidth wHeight camera objects lights) point@(x,y)
-    | bounces == configBounces defaultConfig        = zero
-    | otherwise                                     =
-        case closestObj of
-            Just (obj, hitTime) -> 
-                let colour          = objColour obj
-                    objReflectivity = propReflectivity $ objProps obj
-                -- in (colour ^* (1.0 - objReflectivity)) ^+^ (objReflectivity *^ trace (bounces + 1) world point)
-                in colour
-            Nothing             -> zero
-    where
-        aspect = wWidth / wHeight
-        fov = fromIntegral $ configFov defaultConfig
-        fovX = fov * aspect
-        fovY = fov
-        rayDir = rayDirection world (x * fovX, -y * fovY)
-        eye = cameraEye camera
-        objectHitTimes = zip objects $ map (getHitTime (eye, rayDir)) objects
-        closestObj = foldr bestHitTime Nothing objectHitTimes
-
 shadowed :: [Object] -> Ray -> Bool  -- O(n^2) when mapped unless ghc has some magic
 shadowed objects ray = any (isJust . getHitTime ray) objects
 
-trace' :: Int -> World -> Ray -> Colour
-trace' bounces world@(World _ _ _ _ objects lights) ray@(eye, rayDir)
+objectColourUnderLight :: [Object] -> Object -> Point -> Point -> Vec4 -> Light -> Maybe Colour
+objectColourUnderLight objects obj eyeOC intersectionOC normal light = if shadowed objects rayToLight then Nothing else Just colour
+    where
+        (Properties objDens 
+                    objRefl
+                    specCoeff
+                    diffCoeff
+                    ambCoeff
+                    objSpecRGBA
+                    objDiffRGBA
+                    objAmbRGBA
+                    objF) = objProps obj
+
+        objM = objMat obj
+        
+        vectorToLight = signorm $ (lightPos light) ^-^ intersectionOC
+        specularReflection = signorm $ (vectorToLight ^* (-1.0)) ^+^ (normal ^* (2.0 * normal `dot` vectorToLight))
+        vectorToCenterOfProjection = signorm $ intersectionOC ^-^ eyeOC
+        diffuseIntensity = clampUnit . dot normal $ vectorToLight
+        specularIntensity = (** objF) . clampUnit $ specularReflection `dot` vectorToCenterOfProjection
+        intersectionWC = (objM !* intersectionOC) ^+^ V4 0.0 0.0 epsilon 0.0
+        rayToLight = (intersectionWC, (objM !* vectorToLight))
+        lightModifier = (lightColour light) * (lightIntensity light)
+        colour = lightModifier * ((diffuseIntensity *^ objDiffRGBA) + (specularIntensity *^ objSpecRGBA))
+
+reflect :: Vec4 -> Vec4 -> Vec4
+reflect incident normal = (normal *^ (2.0 * incident `dot` normal)) ^-^ incident
+
+trace :: Int -> World -> Ray -> Colour
+trace bounces world@(World _ _ _ _ objects lights) ray@(eye, rayDir)
     | bounces == configBounces defaultConfig        = zero
     | otherwise                                     =
         let closestObj = closestIntersection ray objects in
         case closestObj of
             Nothing             -> zero
             Just (obj, hitTime) -> 
-                let (Properties objDens 
-                                objRefl
-                                specCoeff
-                                diffCoeff
-                                ambCoeff
-                                objSpecRGBA
-                                objDiffRGBA
-                                objAmbRGBA
-                                objF) = objProps obj
+                let ambCoeff = propAmbCoeff $ objProps obj
+                    ambRGBA = propAmbColour $ objProps obj
+                    objReflectivity = propReflectivity $ objProps obj
+                    objM = objMat obj
+                    objMInv = objMatInv obj
 
-                    matInv = objMatInv obj
-                    eyeOC = matInv !* eye
-                    rayDirOC = matInv !* rayDir
+                    eyeOC = objMInv !* eye
+                    rayDirOC = objMInv !* rayDir
                     intersectionOC = eyeOC ^+^ rayDirOC ^* hitTime
                     normal = (objNormal obj) intersectionOC
-                    vectorsToLights = map (\light -> signorm $ (lightPos light) ^-^ intersectionOC) lights
-                    specularReflections = map (\toLight -> signorm $ (toLight ^* (-1.0)) ^+^ (normal ^* (2.0 * normal `dot` toLight))) vectorsToLights
-                    vectorToCenterOfProjection = signorm $ intersectionOC ^-^ eyeOC
-                    diffuseIntensities = map (clampUnit . dot normal) vectorsToLights
-                    specularIntensities = map ((** objF) . clampUnit . flip dot vectorToCenterOfProjection) specularReflections
-                    intersectionWC = ((objMat obj) !* intersectionOC) ^+^ V4 0.0 0.0 epsilon 0.0 -- in world coordinates
-                    raysToLightsWC = zip (repeat intersectionWC) $ map ((objMat obj) !*) vectorsToLights -- in world coordinates
-                    lightsWithIntensities = zip lights $ zip diffuseIntensities specularIntensities
-                    visibleLights = [(l, (d, s)) | ((l, (d, s)), True) <- zip lightsWithIntensities (map (shadowed objects) raysToLightsWC)]
-                    visibleLightsClamped = map (second $ bimap clampUnit clampUnit) visibleLights
-                    ambientColour = ambCoeff *^ objAmbRGBA
-                    (diffColour, specColour) = bimap sum sum . unzip $ map (second $ bimap ((objDiffRGBA ^*) . (* diffCoeff)) ((objSpecRGBA ^*) . (* specCoeff))) visibleLightsClamped
-                    -- lightModifier = 
-                    
+                    totalLightColour = sum $ mapMaybe (objectColourUnderLight objects obj eyeOC intersectionOC normal) lights
+                    colourBeforeReflection = (ambCoeff *^ ambRGBA)
 
-                -- in (colour ^* (1.0 - objReflectivity)) ^+^ (objReflectivity *^ trace (bounces + 1) world eye)
-                in ambientColour
+                    reflectionVector = reflect intersectionOC normal
+                    reflectionVectorWC = objM !* reflectionVector
+                    intersectionWC = (objM !* intersectionOC) ^+^ (reflectionVector ^* epsilon)
+                    reflectionColour = trace (bounces + 1) world (intersectionWC, reflectionVectorWC)
+
+                    colour = 
+                        if objReflectivity > 0.0 then
+                            ((1.0 - objReflectivity) *^ colourBeforeReflection) ^+^ (objReflectivity *^ reflectionColour)
+                        else
+                            colourBeforeReflection
+                in colour
 
 -- shade :: World -> G.Point -> G.Color
 -- shade world point = colourVecToGloss $ trace 0 (cameraEye camera) world point
