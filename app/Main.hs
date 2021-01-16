@@ -14,13 +14,14 @@ import Linear.Metric
 
 import Control.Monad
 import Data.Maybe
-import Data.Bifunctor (second)
+import Data.Bifunctor (second, bimap)
 
 type Point = V4 Float -- point in homogeneous coordinates
 type Vec4 = V4 Float
 type Vec3 = V3 Float
 type Mat4 = M44 Float
 type Colour = Vec4
+type Ray = (Point, Vec4)
 
 colourVecToGloss :: Colour -> G.Color
 colourVecToGloss (V4 r g b a) = G.makeColorI (floor r) (floor g) (floor b) (floor a)
@@ -39,6 +40,12 @@ colour r g b a = V4 (fromIntegral r) (fromIntegral g) (fromIntegral b) (fromInte
 
 epsilon :: Float
 epsilon = 0.00001
+
+maxIntensity :: Float
+maxIntensity = 254.0
+
+clampUnit :: Float -> Float
+clampUnit = clamp 0.0 (1.0 - epsilon)
 
 data Config = Config { configNear :: Float,
                        configFar :: Float,
@@ -80,23 +87,35 @@ data Camera = Camera { cameraEye :: Point,
 
 data Properties = Properties { propDensity :: Float,
                                propReflectivity :: Float,
-                               propSpecular :: Float,
-                               propDiffuse :: Float,
-                               propAmbient :: Float,
+                               propSpecCoeff :: Float,
+                               propDiffCoeff :: Float,
+                               propAmbCoeff :: Float,
+                               propSpecColour :: Colour,
+                               propDiffColour :: Colour,
+                               propAmbColour :: Colour,
                                propF :: Float }
 
-data Object = Sphere   { objIntersect :: Point -> Vec4 -> Maybe Float, 
+data Object = Sphere   { objIntersect :: Ray -> Maybe Float, 
                          objNormal :: Point -> Vec4,
                          objMat :: Mat4,
                          objMatInv :: Mat4,
-                         objColour :: Colour,
                          objProps :: Properties }
-            | InfPlane { objIntersect :: Point -> Vec4 -> Maybe Float,
+            | InfPlane { objIntersect :: Ray -> Maybe Float,
                          objNormal :: Point -> Vec4,
                          objMat :: Mat4,
                          objMatInv :: Mat4,
-                         objColour :: Colour,
                          objProps :: Properties }
+
+data Light = Light { lightPos :: Point,
+                     lightColour :: Colour,
+                     lightIntensity :: Colour }
+
+data World = World { worldTime :: Float,
+                     worldWindowWidth :: Float,
+                     worldWindowHeight :: Float,
+                     worldCamera :: Camera,
+                     worldObjects :: [Object],
+                     worldLights :: [Light] }
 
 solveQuadratic :: Float -> Float -> Float -> Maybe Float
 solveQuadratic a b c
@@ -110,8 +129,8 @@ solveQuadratic a b c
       t2 = (-b) / a + (sqrt discriminant) / a
       min = if t1 < t2 then t1 else t2
 
-sphereIntersect :: Point -> Vec4 -> Maybe Float
-sphereIntersect eyeH dirH = solveQuadratic a b c
+sphereIntersect :: Ray -> Maybe Float
+sphereIntersect (eyeH, dirH) = solveQuadratic a b c
     where
         eye = vec4ToVec3 eyeH
         dir = vec4ToVec3 dirH
@@ -123,12 +142,12 @@ sphereNormal :: Point -> Vec4
 sphereNormal = signorm . pointToVec
 
 
-sphere :: Colour -> Properties -> Mat4 -> Object
-sphere colour props mat = Sphere sphereIntersect sphereNormal mat (inv44 mat) colour props
+sphere :: Properties -> Mat4 -> Object
+sphere props mat = Sphere sphereIntersect sphereNormal mat (inv44 mat) props
 
 
-infPlaneIntersect :: Point -> Vec4 -> Maybe Float
-infPlaneIntersect eyeH dirH
+infPlaneIntersect :: Ray -> Maybe Float
+infPlaneIntersect (eyeH, dirH)
     | (abs dz) < epsilon = Nothing
     | (-ez)/dz <= 0.0 = Nothing
     | otherwise = Just $ -1.0 * ez / dz
@@ -140,8 +159,8 @@ infPlaneIntersect eyeH dirH
 infPlaneNormal :: Point -> Vec4
 infPlaneNormal _ = V4 0.0 0.0 1.0 0.0
 
-infPlane :: Colour -> Properties -> Mat4 -> Object
-infPlane colour props mat = InfPlane infPlaneIntersect infPlaneNormal mat (inv44 mat) colour props
+infPlane :: Properties -> Mat4 -> Object
+infPlane props mat = InfPlane infPlaneIntersect infPlaneNormal mat (inv44 mat) props
 
 
 translate :: Float -> Float -> Float -> Mat4
@@ -161,17 +180,6 @@ scale x y z = V4 (V4  x  0.0 0.0 0.0)
 --                    (V4 0.0 1.0 0.0 y)
 --                    (V4 0.0 0.0 1.0 z)
 --                    (V4 0.0 0.0 0.0 1.0)
-
-data Light = Light { lightPos :: Point,
-                     lightColour :: Colour,
-                     lightIntensity :: Colour }
-
-data World = World { worldTime :: Float,
-                     worldWindowWidth :: Float,
-                     worldWindowHeight :: Float,
-                     worldCamera :: Camera,
-                     worldObjects :: [Object],
-                     worldLights :: [Light] }
 
 buildCamera :: Point -> Point -> Camera
 buildCamera eye g = Camera eye g u v n near nearWidth nearHeight
@@ -199,8 +207,12 @@ initialWorld = World { worldTime = 0.0,
     where
         eye = V4 1.0 2.0 1.0 1.0
         g = V4 0.0 0.0 0.0 1.0
-        objects = [sphere (V4 125 25 255 255) (Properties 1.0 0.5 0.6 0.2 0.2 10.0) (translate 0.0 0.0 0.0),
-                   infPlane (V4 0 0 255 255) (Properties 1.0 1.0 0.6 0.6 0.6 10.0) identity]
+        colour1 = colour 125 25 255 255
+        colour2 = colour 0 0 255 255
+        sphere1Props = Properties 1.0 0.5 0.6 0.2 0.2 colour1 colour1 colour1 10.0
+        planeProps = Properties 1.0 1.0 0.6 0.6 0.6 colour2 colour2 colour2 10.0
+        objects = [sphere sphere1Props (translate 0.0 0.0 0.0),
+                   infPlane planeProps identity]
         lights = [Light (V4 10.0 5.0 5.0 1.0) (colour 255 255 255 255) (colour 255 255 255 255)]
 
 handleEvent :: G.Event -> World -> World
@@ -259,8 +271,8 @@ rayDirection (World time wWidth wHeight camera objs lights) (x,y) =
         nearHeight = cameraNearHeight camera
 
 
-hitTime :: Point -> Vec4 -> Object -> Maybe Float
-hitTime eyeWC dirWC obj = (objIntersect obj) eyeOC dirOC
+getHitTime :: Ray -> Object -> Maybe Float
+getHitTime (eyeWC, dirWC) obj = objIntersect obj (eyeOC, dirOC)
     where
         eyeOC = (objMatInv obj) !* eyeWC -- eye and direction in object's coordinate system
         dirOC = (objMatInv obj) !* dirWC
@@ -273,10 +285,10 @@ bestHitTime (o, Just n) old =
             Nothing -> new
             Just (o', n') -> if n < n' then new else old
 
-closestIntersection :: Point -> Vec4 -> [Object] -> Maybe (Object, Float)
-closestIntersection eye rayDir objects = foldr bestHitTime Nothing objectHitTimes
+closestIntersection :: Ray -> [Object] -> Maybe (Object, Float)
+closestIntersection ray objects = foldr bestHitTime Nothing objectHitTimes
     where
-        objectHitTimes = zip objects $ map (hitTime eye rayDir) objects
+        objectHitTimes = zip objects $ map (getHitTime ray) objects
 
 trace :: Int -> World -> G.Point -> Colour
 trace bounces world@(World time wWidth wHeight camera objects lights) point@(x,y)
@@ -296,9 +308,56 @@ trace bounces world@(World time wWidth wHeight camera objects lights) point@(x,y
         fovY = fov
         rayDir = rayDirection world (x * fovX, -y * fovY)
         eye = cameraEye camera
-        objectHitTimes = zip objects $ map (hitTime eye rayDir) objects
+        objectHitTimes = zip objects $ map (getHitTime (eye, rayDir)) objects
         closestObj = foldr bestHitTime Nothing objectHitTimes
 
+shadowed :: [Object] -> Ray -> Bool  -- O(n^2) when mapped unless ghc has some magic
+shadowed objects ray = any (isJust . getHitTime ray) objects
+
+trace' :: Int -> World -> Ray -> Colour
+trace' bounces world@(World _ _ _ _ objects lights) ray@(eye, rayDir)
+    | bounces == configBounces defaultConfig        = zero
+    | otherwise                                     =
+        let closestObj = closestIntersection ray objects in
+        case closestObj of
+            Nothing             -> zero
+            Just (obj, hitTime) -> 
+                let (Properties objDens 
+                                objRefl
+                                specCoeff
+                                diffCoeff
+                                ambCoeff
+                                objSpecRGBA
+                                objDiffRGBA
+                                objAmbRGBA
+                                objF) = objProps obj
+
+                    matInv = objMatInv obj
+                    eyeOC = matInv !* eye
+                    rayDirOC = matInv !* rayDir
+                    intersectionOC = eyeOC ^+^ rayDirOC ^* hitTime
+                    normal = (objNormal obj) intersectionOC
+                    vectorsToLights = map (\light -> signorm $ (lightPos light) ^-^ intersectionOC) lights
+                    specularReflections = map (\toLight -> signorm $ (toLight ^* (-1.0)) ^+^ (normal ^* (2.0 * normal `dot` toLight))) vectorsToLights
+                    vectorToCenterOfProjection = signorm $ intersectionOC ^-^ eyeOC
+                    diffuseIntensities = map (clampUnit . dot normal) vectorsToLights
+                    specularIntensities = map ((** objF) . clampUnit . flip dot vectorToCenterOfProjection) specularReflections
+                    intersectionWC = ((objMat obj) !* intersectionOC) ^+^ V4 0.0 0.0 epsilon 0.0 -- in world coordinates
+                    raysToLightsWC = zip (repeat intersectionWC) $ map ((objMat obj) !*) vectorsToLights -- in world coordinates
+                    lightsWithIntensities = zip lights $ zip diffuseIntensities specularIntensities
+                    visibleLights = [(l, (d, s)) | ((l, (d, s)), True) <- zip lightsWithIntensities (map (shadowed objects) raysToLightsWC)]
+                    visibleLightsClamped = map (second $ bimap clampUnit clampUnit) visibleLights
+                    ambientColour = ambCoeff *^ objAmbRGBA
+                    (diffColour, specColour) = bimap sum sum . unzip $ map (second $ bimap ((objDiffRGBA ^*) . (* diffCoeff)) ((objSpecRGBA ^*) . (* specCoeff))) visibleLightsClamped
+                    -- lightModifier = 
+                    
+
+                -- in (colour ^* (1.0 - objReflectivity)) ^+^ (objReflectivity *^ trace (bounces + 1) world eye)
+                in ambientColour
+
+-- shade :: World -> G.Point -> G.Color
+-- shade world point = colourVecToGloss $ trace 0 (cameraEye camera) world point
+--     where
 
 shade :: World -> G.Point -> G.Color
 shade world point = colourVecToGloss $ trace 0 world point
