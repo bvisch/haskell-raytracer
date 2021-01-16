@@ -209,11 +209,11 @@ initialWorld = World { worldTime = 0.0,
         g = V4 0.0 0.0 0.0 1.0
         colour1 = colour 125 25 255 255
         colour2 = colour 0 0 255 255
-        sphere1Props = Properties 1.0 0.5 0.6 0.2 0.2 colour1 colour1 colour1 10.0
-        planeProps = Properties 1.0 1.0 0.6 0.6 0.6 colour2 colour2 colour2 10.0
+        sphere1Props = Properties 1.0 0.1 0.6 0.2 0.2 colour1 colour1 colour1 10.0
+        planeProps = Properties 1.0 0.2 0.6 0.6 0.6 colour2 colour2 colour2 10.0
         objects = [sphere sphere1Props (translate 0.0 0.0 0.0),
                    infPlane planeProps identity]
-        lights = [Light (V4 10.0 5.0 5.0 1.0) (colour 255 255 255 255) (colour 255 255 255 255)]
+        lights = [Light (V4 2.0 2.0 2.0 1.0) (colour 255 255 255 255) (colour 255 255 255 255)]
 
 handleEvent :: G.Event -> World -> World
 handleEvent event world
@@ -319,7 +319,7 @@ objectColourUnderLight objects obj eyeOC intersectionOC normal light = if shadow
         colour = lightModifier * ((diffuseIntensity *^ objDiffRGBA) + (specularIntensity *^ objSpecRGBA))
 
 reflect :: Vec4 -> Vec4 -> Vec4
-reflect incident normal = (normal *^ (2.0 * incident `dot` normal)) ^-^ incident
+reflect incident normal = (normal ^* (2.0 * incident `dot` normal)) ^-^ incident
 
 trace :: Int -> World -> Ray -> Colour
 trace bounces world@(World _ _ _ _ objects lights) ray@(eye, rayDir)
@@ -347,19 +347,26 @@ trace bounces world@(World _ _ _ _ objects lights) ray@(eye, rayDir)
                     intersectionWC = (objM !* intersectionOC) ^+^ (reflectionVector ^* epsilon)
                     reflectionColour = trace (bounces + 1) world (intersectionWC, reflectionVectorWC)
 
-                    colour = 
-                        if objReflectivity > 0.0 then
-                            ((1.0 - objReflectivity) *^ colourBeforeReflection) ^+^ (objReflectivity *^ reflectionColour)
-                        else
-                            colourBeforeReflection
+                    -- colour = 
+                    --     if objReflectivity > 0.0 then
+                    --         ((1.0 - objReflectivity) *^ colourBeforeReflection) ^+^ (objReflectivity *^ reflectionColour)
+                    --     else
+                    --         colourBeforeReflection
+
+                    colour = colourBeforeReflection
                 in colour
 
--- shade :: World -> G.Point -> G.Color
--- shade world point = colourVecToGloss $ trace 0 (cameraEye camera) world point
---     where
 
 shade :: World -> G.Point -> G.Color
-shade world point = colourVecToGloss $ trace 0 world point
+shade world@(World time wWidth wHeight camera objects lights) point@(x, y) = colourVecToGloss $ trace 0 world ray
+    where
+        aspect = wWidth / wHeight
+        fov = fromIntegral $ configFov defaultConfig
+        fovX = fov * aspect
+        fovY = fov
+        rayDir = rayDirection world (x * fovX, -y * fovY)
+        eye = cameraEye camera
+        ray = (eye, rayDir)
         
         
 
