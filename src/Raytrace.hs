@@ -9,8 +9,8 @@ import Data.Maybe ( mapMaybe, isJust )
 import GHC.Float ( float2Double, double2Float )
 
 import Linear.V4 ( vector )
-import Linear.Metric ( Metric(signorm, dot) )
-import Linear.Vector ( Additive((^+^), (^-^), zero), (*^), (^*) )
+import Linear.Metric ( Metric(signorm, dot, norm) )
+import Linear.Vector ( Additive((^+^), (^-^), zero), (*^), (^*), (^/))
 import Linear.Matrix ((!*))
 
 import qualified Graphics.Gloss as G
@@ -63,15 +63,19 @@ objectColourUnderLight objects obj eyeOC intersectionOC normal light = if shadow
 
         objM = objMat obj
         
-        vectorToLight = signorm $ (lightPos light) ^-^ intersectionOC
-        specularReflection = signorm $ (vectorToLight ^* (-1.0)) ^+^ (normal ^* (2.0 * normal `dot` vectorToLight))
-        vectorToCenterOfProjection = signorm $ intersectionOC ^-^ eyeOC
-        diffuseIntensity = clampUnit . dot normal $ vectorToLight
-        specularIntensity = (** objF) . clampUnit $ specularReflection `dot` vectorToCenterOfProjection
+        vectorToLight = (lightPos light) ^-^ intersectionOC
+        lightDistance = norm vectorToLight
+        lightDir = signorm vectorToLight
+        reflectDir = signorm $ reflect (-lightDir) normal
+        viewDir = signorm $ intersectionOC ^-^ eyeOC
+        diffuseIntensity = clampUnit $ max (lightDir `dot` normal) 0.0
+        specularIntensity = (** (objF / 4.0)) . clampUnit $ max (reflectDir `dot` viewDir) 0.0
         intersectionWC = (objM !* intersectionOC) ^+^ (normal ^* epsilon)
-        rayToLight = (intersectionWC, (objM !* vectorToLight))
-        lightModifier = (lightColour light) * (lightIntensity light)
-        colour = lightModifier * ((diffuseIntensity *^ objDiffRGBA) + (specularIntensity *^ objSpecRGBA))
+        rayToLight = (intersectionWC, (objM !* lightDir))
+        lightModifier = (lightColour light) * (lightIntensity light) ^/ (lightDistance * lightDistance)
+        colour = lightModifier * objAmbRGBA +
+                 lightModifier * (diffuseIntensity *^ objDiffRGBA) + 
+                 lightModifier * (specularIntensity *^ objSpecRGBA)
 
 reflect :: Vec4 -> Vec4 -> Vec4
 reflect incident normal = (normal ^* (2.0 * incident `dot` normal)) ^-^ incident
@@ -99,7 +103,7 @@ trace bounces world@(World _ _ _ _ objects lights) ray@(eye, rayDir)
 
                     reflectionVector = reflect intersectionOC normal
                     reflectionVectorWC = signorm $ objM !* reflectionVector
-                    intersectionWC = (objM !* intersectionOC) ^+^ (reflectionVectorWC ^* epsilon)
+                    intersectionWC = (objM !* intersectionOC) ^+^ (objM !* normal)
                     reflectionColour = trace (bounces + 1) world (intersectionWC, reflectionVectorWC)
 
                     colour = 

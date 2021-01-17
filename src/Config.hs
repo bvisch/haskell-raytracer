@@ -19,8 +19,8 @@ defaultConfig = Config { configNear = near,
                          configWindowWidth = 600, 
                          configWindowHeight = 400,
                          configFov = 460,
-                         configStepsPerSecond = 2, 
-                         configBounces = 3, 
+                         configStepsPerSecond = 1, 
+                         configBounces = 4, 
                          configZoom = 1 }
     where
         near = 1.0

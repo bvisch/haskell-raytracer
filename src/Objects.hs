@@ -70,13 +70,10 @@ sphere props mat = Sphere sphereIntersect sphereNormal mat (inv44 mat) props
 
 
 infPlaneIntersect :: Ray -> Maybe Double
-infPlaneIntersect (eyeH, dirH)
+infPlaneIntersect (eye@(V4 ex ey ez ew), dir@(V4 dx dy dz dw))
     | (abs dz) < epsilon = Nothing
     | (-ez)/dz <= 0.0 = Nothing
     | otherwise = Just $ -1.0 * ez / dz
-    where
-        eye@(V3 ex ey ez) = vec4ToVec3 eyeH
-        dir@(V3 dx dy dz) = vec4ToVec3 dirH
 
 
 infPlaneNormal :: Point -> Vec4
