@@ -39,8 +39,8 @@ data Camera = Camera { cameraEye :: Point,
 
 
 data World = World { worldTime :: Double,
-                     worldWindowWidth :: Double,
-                     worldWindowHeight :: Double,
+                     worldWindowWidth :: Float,
+                     worldWindowHeight :: Float,
                      worldCamera :: Camera,
                      worldObjects :: [Object],
                      worldLights :: [Light] }

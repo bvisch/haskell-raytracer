@@ -18,8 +18,8 @@ import qualified Graphics.Gloss as G
 rayDirection :: World -> G.Point -> Vec4
 rayDirection (World time wWidth wHeight camera objs lights) (x,y) = 
         vector $ -1.0 * near *^ (cameraN camera) ^+^ 
-        nearWidth * (2.0 * (float2Double x) / wWidth - 1.0) *^ (cameraU camera) ^+^ 
-        nearHeight * (2.0 * (float2Double y) / wHeight - 1.0) *^ (cameraV camera)
+        nearWidth * (2.0 * (float2Double x) / (float2Double wWidth) - 1.0) *^ (cameraU camera) ^+^ 
+        nearHeight * (2.0 * (float2Double y) / (float2Double wHeight) - 1.0) *^ (cameraV camera)
     where
         near = cameraNear camera
         nearWidth = cameraNearWidth camera
@@ -119,6 +119,6 @@ shade world@(World time wWidth wHeight camera objects lights) point@(x, y) = col
         fov = fromIntegral $ configFov defaultConfig
         fovX = fov * aspect
         fovY = fov
-        rayDir = rayDirection world (x * (double2Float fovX), y * (double2Float fovY))
+        rayDir = rayDirection world (x * fovX, y *  fovY)
         eye = cameraEye camera
         ray = (eye, rayDir)
