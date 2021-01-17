@@ -22,25 +22,25 @@ buildCamera eye g = Camera eye g u v n near nearWidth nearHeight
         nearWidth = configNearWidth defaultConfig
         nearHeight = configNearHeight defaultConfig
 
-translate :: Float -> Float -> Float -> Mat4
+translate :: Double -> Double -> Double -> Mat4
 translate x y z = V4 (V4 1.0 0.0 0.0 x) 
                      (V4 0.0 1.0 0.0 y)
                      (V4 0.0 0.0 1.0 z)
                      (V4 0.0 0.0 0.0 1.0)
 
-scale :: Float -> Float -> Float -> Mat4
+scale :: Double -> Double -> Double -> Mat4
 scale x y z = V4 (V4  x  0.0 0.0 0.0) 
                  (V4 0.0  y  0.0 0.0)
                  (V4 0.0 0.0  z  0.0)
                  (V4 0.0 0.0 0.0 1.0)
 
--- rotate :: Float -> Float -> Float -> Mat4
+-- rotate :: Double -> Double -> Double -> Mat4
 -- rotate x y z = (V4 (V4 1.0 0.0 0.0 x) 
 --                    (V4 0.0 1.0 0.0 y)
 --                    (V4 0.0 0.0 1.0 z)
 --                    (V4 0.0 0.0 0.0 1.0)
 
-solveQuadratic :: Float -> Float -> Float -> Maybe Float
+solveQuadratic :: Double -> Double -> Double -> Maybe Double
 solveQuadratic a b c
   | discriminant < 0.0 = Nothing
   | discriminant < epsilon = Just ((-b) / a)
@@ -52,7 +52,7 @@ solveQuadratic a b c
       t2 = (-b) / a + (sqrt discriminant) / a
       min = if t1 < t2 then t1 else t2
 
-sphereIntersect :: Ray -> Maybe Float
+sphereIntersect :: Ray -> Maybe Double
 sphereIntersect (eyeH, dirH) = solveQuadratic a b c
     where
         eye = vec4ToVec3 eyeH
@@ -69,7 +69,7 @@ sphere :: Properties -> Mat4 -> Object
 sphere props mat = Sphere sphereIntersect sphereNormal mat (inv44 mat) props
 
 
-infPlaneIntersect :: Ray -> Maybe Float
+infPlaneIntersect :: Ray -> Maybe Double
 infPlaneIntersect (eyeH, dirH)
     | (abs dz) < epsilon = Nothing
     | (-ez)/dz <= 0.0 = Nothing

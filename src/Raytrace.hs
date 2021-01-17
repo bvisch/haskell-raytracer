@@ -6,6 +6,7 @@ import Objects
 import Config
 
 import Data.Maybe ( mapMaybe, isJust )
+import GHC.Float ( float2Double, double2Float )
 
 import Linear.V4 ( vector )
 import Linear.Metric ( Metric(signorm, dot) )
@@ -17,21 +18,21 @@ import qualified Graphics.Gloss as G
 rayDirection :: World -> G.Point -> Vec4
 rayDirection (World time wWidth wHeight camera objs lights) (x,y) = 
         vector $ -1.0 * near *^ (cameraN camera) ^+^ 
-        nearWidth * (2.0 * x / wWidth - 1.0) *^ (cameraU camera) ^+^ 
-        nearHeight * (2.0 * y / wHeight - 1.0) *^ (cameraV camera)
+        nearWidth * (2.0 * (float2Double x) / wWidth - 1.0) *^ (cameraU camera) ^+^ 
+        nearHeight * (2.0 * (float2Double y) / wHeight - 1.0) *^ (cameraV camera)
     where
         near = cameraNear camera
         nearWidth = cameraNearWidth camera
         nearHeight = cameraNearHeight camera
 
 
-getHitTime :: Ray -> Object -> Maybe Float
+getHitTime :: Ray -> Object -> Maybe Double
 getHitTime (eyeWC, dirWC) obj = objIntersect obj (eyeOC, dirOC)
     where
         eyeOC = (objMatInv obj) !* eyeWC -- eye and direction in object's coordinate system
         dirOC = (objMatInv obj) !* dirWC
 
-bestHitTime :: (Object, Maybe Float) -> Maybe (Object, Float) -> Maybe (Object, Float)
+bestHitTime :: (Object, Maybe Double) -> Maybe (Object, Double) -> Maybe (Object, Double)
 bestHitTime (o, Nothing) old = old
 bestHitTime (o, Just n) old = 
     let new = Just (o, n) in 
@@ -39,7 +40,7 @@ bestHitTime (o, Just n) old =
             Nothing -> new
             Just (o', n') -> if n < n' then new else old
 
-closestIntersection :: Ray -> [Object] -> Maybe (Object, Float)
+closestIntersection :: Ray -> [Object] -> Maybe (Object, Double)
 closestIntersection ray objects = foldr bestHitTime Nothing objectHitTimes
     where
         objectHitTimes = zip objects $ map (getHitTime ray) objects
@@ -118,6 +119,6 @@ shade world@(World time wWidth wHeight camera objects lights) point@(x, y) = col
         fov = fromIntegral $ configFov defaultConfig
         fovX = fov * aspect
         fovY = fov
-        rayDir = rayDirection world (x * fovX, y * fovY)
+        rayDir = rayDirection world (x * (double2Float fovX), y * (double2Float fovY))
         eye = cameraEye camera
         ray = (eye, rayDir)

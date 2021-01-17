@@ -1,9 +1,9 @@
 module Config where
 
-data Config = Config { configNear :: Float,
-                       configFar :: Float,
-                       configNearWidth :: Float,
-                       configNearHeight :: Float,
+data Config = Config { configNear :: Double,
+                       configFar :: Double,
+                       configNearWidth :: Double,
+                       configNearHeight :: Double,
                        configWindowWidth :: Int, 
                        configWindowHeight :: Int,
                        configFov :: Int,

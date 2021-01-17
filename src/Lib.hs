@@ -8,17 +8,17 @@ import qualified Graphics.Gloss                         as G
 
 import Data.Bifunctor (second)
 
-type Point = V4 Float -- point in homogeneous coordinates
-type Vec4 = V4 Float
-type Vec3 = V3 Float
-type Mat4 = M44 Float
+type Point = V4 Double -- point in homogeneous coordinates
+type Vec4 = V4 Double
+type Vec3 = V3 Double
+type Mat4 = M44 Double
 type Colour = Vec4
 type Ray = (Point, Vec4)
 
 mapSnd :: (b -> c) -> [(a,b)] -> [(a,c)]
 mapSnd f = map (second f)
 
-clamp :: Float -> Float -> Float -> Float
+clamp :: Double -> Double -> Double -> Double
 clamp min max x
   | x > max = max
   | x < min = min
@@ -39,11 +39,11 @@ vec4ToVec3 (V4 x y z w) = V3 x y z
 colour :: Int -> Int -> Int -> Int -> Colour
 colour r g b a = V4 (fromIntegral r) (fromIntegral g) (fromIntegral b) (fromIntegral a)
 
-epsilon :: Float
+epsilon :: Double
 epsilon = 0.00001
 
-maxIntensity :: Float
+maxIntensity :: Double
 maxIntensity = 254.0
 
-clampUnit :: Float -> Float
+clampUnit :: Double -> Double
 clampUnit = clamp 0.0 (1.0 - epsilon)

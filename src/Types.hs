@@ -2,22 +2,22 @@ module Types where
 
 import Lib ( Colour, Mat4, Point, Ray, Vec3, Vec4 )
 
-data Properties = Properties { propDensity :: Float,
-                               propReflectivity :: Float,
-                               propSpecCoeff :: Float,
-                               propDiffCoeff :: Float,
-                               propAmbCoeff :: Float,
+data Properties = Properties { propDensity :: Double,
+                               propReflectivity :: Double,
+                               propSpecCoeff :: Double,
+                               propDiffCoeff :: Double,
+                               propAmbCoeff :: Double,
                                propSpecColour :: Colour,
                                propDiffColour :: Colour,
                                propAmbColour :: Colour,
-                               propF :: Float }
+                               propF :: Double }
 
-data Object = Sphere   { objIntersect :: Ray -> Maybe Float, 
+data Object = Sphere   { objIntersect :: Ray -> Maybe Double, 
                          objNormal :: Point -> Vec4,
                          objMat :: Mat4,
                          objMatInv :: Mat4,
                          objProps :: Properties }
-            | InfPlane { objIntersect :: Ray -> Maybe Float,
+            | InfPlane { objIntersect :: Ray -> Maybe Double,
                          objNormal :: Point -> Vec4,
                          objMat :: Mat4,
                          objMatInv :: Mat4,
@@ -33,14 +33,14 @@ data Camera = Camera { cameraEye :: Point,
                        cameraU :: Vec3,
                        cameraV :: Vec3,
                        cameraN :: Vec3,
-                       cameraNear :: Float,
-                       cameraNearWidth :: Float,
-                       cameraNearHeight :: Float }
+                       cameraNear :: Double,
+                       cameraNearWidth :: Double,
+                       cameraNearHeight :: Double }
 
 
-data World = World { worldTime :: Float,
-                     worldWindowWidth :: Float,
-                     worldWindowHeight :: Float,
+data World = World { worldTime :: Double,
+                     worldWindowWidth :: Double,
+                     worldWindowHeight :: Double,
                      worldCamera :: Camera,
                      worldObjects :: [Object],
                      worldLights :: [Light] }
