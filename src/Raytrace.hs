@@ -9,7 +9,7 @@ import Data.Maybe ( mapMaybe, isJust )
 import GHC.Float ( float2Double, double2Float )
 
 import Linear.V4 ( vector )
-import Linear.Metric ( Metric(signorm, dot, norm) )
+import Linear.Metric ( Metric(signorm, dot, norm), normalize )
 import Linear.Vector ( Additive((^+^), (^-^), zero), (*^), (^*), (^/))
 import Linear.Matrix ((!*))
 
@@ -49,7 +49,7 @@ shadowed :: [Object] -> Ray -> Bool
 shadowed objects ray = any (isJust . getHitTime ray) objects
 
 objectColourUnderLight :: [Object] -> Object -> Point -> Point -> Vec4 -> Light -> Maybe Colour
-objectColourUnderLight objects obj eyeOC intersectionOC normal light = if shadowed objects rayToLight then Nothing else Just colour
+objectColourUnderLight objects obj eyeOC intersectionOC normalOC light = if shadowed objects rayToLight then Nothing else Just colour
     where
         (Properties objDens 
                     objRefl
@@ -62,23 +62,25 @@ objectColourUnderLight objects obj eyeOC intersectionOC normal light = if shadow
                     objF) = objProps obj
 
         objM = objMat obj
+        objMInv = objMatInv obj
         
-        vectorToLight = (lightPos light) ^-^ intersectionOC
-        lightDistance = norm vectorToLight
-        lightDir = signorm vectorToLight
-        reflectDir = signorm $ reflect (-lightDir) normal
-        viewDir = signorm $ intersectionOC ^-^ eyeOC
-        diffuseIntensity = clampUnit $ max (lightDir `dot` normal) 0.0
-        specularIntensity = (** (objF / 4.0)) . clampUnit $ max (reflectDir `dot` viewDir) 0.0
-        intersectionWC = (objM !* intersectionOC) ^+^ (normal ^* epsilon)
-        rayToLight = (intersectionWC, (objM !* lightDir))
+        vectorToLightOC = (objMInv !* lightPos light) ^-^ intersectionOC
+        lightDistance = norm vectorToLightOC
+        lightDirOC = normalize vectorToLightOC
+        reflectDirOC = normalize $ reflect (-lightDirOC) normalOC
+        viewDirOC = normalize $ intersectionOC ^-^ eyeOC
+        intersectionWC = objM !* (intersectionOC ^+^ (normalOC ^* epsilon))
+        rayToLight = (intersectionWC, (objM !* lightDirOC))
+
+        diffuseIntensity = clampUnit $ lightDirOC `dot` normalOC
+        specularIntensity = (** (objF / 4.0)) . clampUnit $ reflectDirOC `dot` viewDirOC
         lightModifier = (lightColour light) * (lightIntensity light) ^/ (lightDistance * lightDistance)
         colour = lightModifier * objAmbRGBA +
                  lightModifier * (diffuseIntensity *^ objDiffRGBA) + 
                  lightModifier * (specularIntensity *^ objSpecRGBA)
 
 reflect :: Vec4 -> Vec4 -> Vec4
-reflect incident normal = (normal ^* (2.0 * incident `dot` normal)) ^-^ incident
+reflect incident normal = incident ^-^ (normal ^* (2.0 * incident `dot` normal))
 
 trace :: Int -> World -> Ray -> Colour
 trace bounces world@(World _ _ _ _ objects lights) ray@(eye, rayDir)
@@ -95,15 +97,15 @@ trace bounces world@(World _ _ _ _ objects lights) ray@(eye, rayDir)
                     objMInv = objMatInv obj
 
                     eyeOC = objMInv !* eye
-                    rayDirOC = objMInv !* rayDir
+                    rayDirOC = normalize $ objMInv !* rayDir
                     intersectionOC = eyeOC ^+^ rayDirOC ^* hitTime
-                    normal = (objNormal obj) intersectionOC
-                    totalLightColour = sum $ mapMaybe (objectColourUnderLight objects obj eyeOC intersectionOC normal) lights
+                    normalOC = (objNormal obj) intersectionOC
+                    totalLightColour = sum $ mapMaybe (objectColourUnderLight objects obj eyeOC intersectionOC normalOC) lights
                     colourBeforeReflection = (ambCoeff *^ ambRGBA) ^+^ totalLightColour
 
-                    reflectionVector = reflect intersectionOC normal
-                    reflectionVectorWC = signorm $ objM !* reflectionVector
-                    intersectionWC = (objM !* intersectionOC) ^+^ (objM !* normal)
+                    reflectionVectorOC = reflect intersectionOC normalOC
+                    reflectionVectorWC = normalize $ objM !* reflectionVectorOC
+                    intersectionWC = (objM !* intersectionOC) ^+^ (objM !* normalOC ^* epsilon) -- look here tomorrow
                     reflectionColour = trace (bounces + 1) world (intersectionWC, reflectionVectorWC)
 
                     colour = 
@@ -123,6 +125,6 @@ shade world@(World time wWidth wHeight camera objects lights) point@(x, y) = col
         fov = fromIntegral $ configFov defaultConfig
         fovX = fov * aspect
         fovY = fov
-        rayDir = rayDirection world (x * fovX, y *  fovY)
+        rayDir = normalize $ rayDirection world (x * fovX, y * fovY)
         eye = cameraEye camera
         ray = (eye, rayDir)

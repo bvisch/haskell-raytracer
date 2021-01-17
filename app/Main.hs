@@ -27,7 +27,7 @@ initialWorld = World { worldTime = 0.0,
         colour1 = colour 255 25 80 255
         colour2 = colour 0 0 255 255
         sphere1Props = Properties { propDensity = 1.0,
-                                    propReflectivity = 0.1,
+                                    propReflectivity = 0.5,
                                     propSpecCoeff = 0.02,
                                     propDiffCoeff = 0.68,
                                     propAmbCoeff = 0.3, 
@@ -45,7 +45,6 @@ initialWorld = World { worldTime = 0.0,
                                   propAmbColour = colour2,
                                   propF = 10.0 }
         objects = [sphere sphere1Props (translate 0.0 0.0 2.0),
-                   sphere sphere1Props (translate 0.0 0.0 (-2.0)),
                    sphere sphere1Props (translate (-3.0) 0.01 2.0),
                    infPlane planeProps identity]
         lights = [Light (V4 2.0 2.0 2.0 1.0) (colour 100 100 100 255) (V4 0.1 0.1 0.1 255),

@@ -1,19 +1,36 @@
 module Lib where
 
-import Linear.V3 ( V3(..) )
-import Linear.V4 ( V4(..) )
-import Linear.Matrix ( M44 )
+-- import qualified Linear.V3 as L
+-- import qualified Linear.V4 as L
+-- import qualified Linear.Matrix as L
 
-import qualified Graphics.Gloss                         as G
+import Linear.V3
+import Linear.V4
+import Linear.Matrix
+
+import qualified Graphics.Gloss as G
 
 import Data.Bifunctor (second)
 
-type Point = V4 Double -- point in homogeneous coordinates
+-- newtype Point = Point { unpoint :: V4 Double } -- point in homogeneous coordinates
+-- newtype UnitV = UnitV { ununit :: V4 Double }
+
+type Point = V4 Double
 type Vec4 = V4 Double
 type Vec3 = V3 Double
 type Mat4 = M44 Double
 type Colour = Vec4
 type Ray = (Point, Vec4)
+
+
+
+-- f :: (V4 Double -> V4 Double) -> (Point -> Point)
+-- f g = Point . g . unpoint
+
+-- f2 :: (V4 Double -> V4 Double -> V4 Double) -> (Point -> Point -> Point)
+-- f2 o p1 p2 = Point $ (unpoint p1) `o` (unpoint p2)
+
+-- (^-^) = f2 L.(^-^)
 
 mapSnd :: (b -> c) -> [(a,b)] -> [(a,c)]
 mapSnd f = map (second f)
