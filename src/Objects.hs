@@ -4,23 +4,47 @@ import Lib
 import Types
 import Config
 
-import Linear.V3 ( V3(V3), cross )
-import Linear.V4 ( V4(V4) )
-import Linear.Matrix ( inv44 )
-import Linear.Vector ( Additive((^-^)) )
-import Linear.Metric ( Metric(signorm, dot) )
+import GHC.Float ( double2Float )
 
+import Control.Lens
+
+import Linear.V3 ( V3(V3), cross )
+import Linear.V4 ( V4(V4), _xyz, _w )
+import Linear.Matrix ( (!*), (!*!), inv44 )
+import Linear.Vector ( Additive((^-^)), (^/) )
+import Linear.Metric ( Metric(dot), normalize )
+import Linear.Projection
 
 buildCamera :: Point -> Point -> Camera
-buildCamera eye g = Camera eye g u v n near nearWidth nearHeight
+buildCamera eye g = Camera eye g u v n near nearWidth nearHeight viewMat frustumMat screenMat cameraMat
     where
+        (Config near far nearWidth nearHeight windowWidth windowHeight viewAngle aspectRatio _ _ _ _) = defaultConfig 
         up = V3 0.0 0.0 1.0
-        n = vec4ToVec3 $ signorm $ eye ^-^ g
-        u = signorm $ cross up n
-        v = signorm $ cross n u
-        near = configNear defaultConfig
-        nearWidth = configNearWidth defaultConfig
-        nearHeight = configNearHeight defaultConfig
+        n = vec4ToVec3 $ normalize $ eye ^-^ g
+        u = normalize $ cross up n
+        v = normalize $ cross n u
+
+        viewMat = lookAt (eye ^. _xyz) (g ^. _xyz) up
+        theta = viewAngle
+        t = near * tan (pi / 180.0 * theta / 2)
+        b = -t
+        r = aspectRatio * t
+        l = -r
+        frustumMat = frustum l r b t near far
+        w = (fromIntegral windowWidth) / 2.0
+        h = (fromIntegral windowHeight) / 2.0
+        screenMat = V4 (V4  w  0.0 0.0 1.0)
+                       (V4 0.0  h  0.0 1.0)
+                       (V4 0.0 0.0 1.0 0.0)
+                       (V4 0.0 0.0 0.0 1.0)
+
+        cameraMat = screenMat !*! frustumMat !*! viewMat
+
+cameraProject :: Camera -> Point -> (Float, Float)
+cameraProject camera point = (double2Float x, double2Float y)
+    where
+        pointTransformed = (cameraMat camera) !* point
+        pointPerspProj@(V4 x y _ _) = pointTransformed ^/ (pointTransformed ^. _w)
 
 translate :: Double -> Double -> Double -> Mat4
 translate x y z = V4 (V4 1.0 0.0 0.0 x) 
@@ -62,7 +86,7 @@ sphereIntersect (eyeH, dirH) = solveQuadratic a b c
         c = eye `dot` eye - 1.0
 
 sphereNormal :: Point -> Vec4
-sphereNormal = signorm . pointToVec
+sphereNormal = normalize . pointToVec
 
 
 sphere :: Properties -> Mat4 -> Object

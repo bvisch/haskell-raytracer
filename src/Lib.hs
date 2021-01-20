@@ -57,7 +57,7 @@ colour :: Int -> Int -> Int -> Int -> Colour
 colour r g b a = V4 (fromIntegral r) (fromIntegral g) (fromIntegral b) (fromIntegral a)
 
 epsilon :: Double
-epsilon = 0.00001
+epsilon = 0.0001
 
 maxIntensity :: Double
 maxIntensity = 254.0

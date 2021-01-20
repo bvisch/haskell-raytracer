@@ -1,6 +1,7 @@
 module Types where
 
 import Lib ( Colour, Mat4, Point, Ray, Vec3, Vec4 )
+import qualified Graphics.Gloss as G
 
 data Properties = Properties { propDensity :: Double,
                                propReflectivity :: Double,
@@ -35,7 +36,11 @@ data Camera = Camera { cameraEye :: Point,
                        cameraN :: Vec3,
                        cameraNear :: Double,
                        cameraNearWidth :: Double,
-                       cameraNearHeight :: Double }
+                       cameraNearHeight :: Double,
+                       cameraViewMat :: Mat4,
+                       cameraFrustumMat :: Mat4,
+                       cameraScreenMat :: Mat4,
+                       cameraMat :: Mat4 }
 
 
 data World = World { worldTime :: Double,
@@ -43,4 +48,6 @@ data World = World { worldTime :: Double,
                      worldWindowHeight :: Float,
                      worldCamera :: Camera,
                      worldObjects :: [Object],
-                     worldLights :: [Light] }
+                     worldLight :: Light,
+                     worldClickPos :: Maybe G.Point,
+                     worldDebugIntersections :: Maybe [(Float, Float)] }

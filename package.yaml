@@ -27,6 +27,7 @@ library:
   dependencies:
     - linear
     - gloss
+    - lens
 
 executables:
   haskell-raytracer-exe:

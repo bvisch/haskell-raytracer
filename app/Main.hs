@@ -20,9 +20,11 @@ initialWorld = World { worldTime = 0.0,
                        worldWindowHeight = fromIntegral $ configWindowHeight defaultConfig,
                        worldCamera = buildCamera eye g,
                        worldObjects = objects,
-                       worldLights = lights }
+                       worldLight = light,
+                       worldClickPos = Nothing,
+                       worldDebugIntersections = Nothing }
     where
-        eye = V4 1.0 2.0 1.0 1.0
+        eye = V4 2.0 4.0 2.0 1.0
         g = V4 0.0 0.0 2.0 1.0
         colour1 = colour 255 25 80 255
         colour2 = colour 0 0 255 255
@@ -47,8 +49,7 @@ initialWorld = World { worldTime = 0.0,
         objects = [sphere sphere1Props (translate 0.0 0.0 2.0),
                    sphere sphere1Props (translate (-3.0) 0.01 2.0),
                    infPlane planeProps identity]
-        lights = [Light (V4 2.0 2.0 2.0 1.0) (colour 100 100 100 255) (V4 0.1 0.1 0.1 255),
-                  Light (V4 (-2.0) 2.0 2.0 1.0) (colour 100 100 100 255) (V4 0.1 0.1 0.1 255)]
+        light = Light (V4 2.0 2.0 2.0 1.0) (colour 100 100 100 255) (V4 0.1 0.1 0.1 255)
 
 handleEvent :: G.Event -> World -> World
 handleEvent event world
@@ -71,26 +72,50 @@ handleEvent event world
         = world { worldCamera = buildCamera (V4 ex ey (ez - 0.1) ew) g }
 
     | G.EventKey (G.Char 'u') G.Down _ _        <- event
-        = world { worldCamera = buildCamera eye (V4 gx (gy + 0.1) gz gw) }
+        = let l = Light (V4 lx (ly + 0.1) lz lw) c i in
+            world { worldLight = l }
 
     | G.EventKey (G.Char 'h') G.Down _ _        <- event
-        = world { worldCamera = buildCamera eye (V4 (gx - 0.1) gy gz gw) }
+        = let l = Light (V4 (lx - 0.1) ly lz lw) c i in
+            world { worldLight = l }
 
     | G.EventKey (G.Char 'j') G.Down _ _        <- event
-        = world { worldCamera = buildCamera eye (V4 gx (gy - 0.1) gz gw) }
+        = let l = Light (V4 lx (ly - 0.1) lz lw) c i in
+            world { worldLight = l }
 
     | G.EventKey (G.Char 'k') G.Down _ _        <- event
-        = world { worldCamera = buildCamera eye (V4 (gx + 0.1) gy gz gw) }
+        = let l = Light (V4 (lx + 0.1) ly lz lw) c i in
+            world { worldLight = l }
 
     | G.EventKey (G.Char 'o') G.Down _ _        <- event
-        = world { worldCamera = buildCamera eye (V4 gx gy (gz + 0.1) gw) }
+        = let l = Light (V4 lx ly (lz + 0.1) lw) c i in
+            world { worldLight = l }
 
     | G.EventKey (G.Char 'l') G.Down _ _        <- event
-        = world { worldCamera = buildCamera eye (V4 gx gy (gz - 0.1) gw) }
+        = let l = Light (V4 lx ly (lz - 0.1) lw) c i in
+            world { worldLight = l }
+
+
+    | G.EventKey (G.MouseButton G.LeftButton)
+                     G.Down _ (x, y) <- event
+        = let
+            world' = world { worldClickPos = Just (x, y) }
+            wWidth = worldWindowWidth world
+            wHeight = worldWindowHeight world
+            actualPos = (x + wWidth / 2.0, y + wHeight / 2.0)
+            ray = getFirstRay world actualPos
+            intersections = debugRayPoints 0 world' ray
+            world'' =  world' { worldDebugIntersections = Just $ intersections }
+          in
+              unsafePerformIO $ do
+                  print intersections
+                  return $
+                    world''
 
     | otherwise = world
     where
-        camera@(Camera eye@(V4 ex ey ez ew) g@(V4 gx gy gz gw) _ _ _ _ _ _) = worldCamera world
+        camera@(Camera eye@(V4 ex ey ez ew) g@(V4 gx gy gz gw) _ _ _ _ _ _ _ _ _ _) = worldCamera world
+        light@(Light (V4 lx ly lz lw) c i) = worldLight world
 
 advanceWorld :: Float -> World -> World
 advanceWorld time world = world
@@ -103,7 +128,7 @@ main = G.playField
         zoom
         (configStepsPerSecond defaultConfig)
         initialWorld
-        shade
+        debugAndTrace
         handleEvent
         advanceWorld
     where
