@@ -50,4 +50,4 @@ data World = World { worldTime :: Double,
                      worldObjects :: [Object],
                      worldLight :: Light,
                      worldClickPos :: Maybe G.Point,
-                     worldDebugIntersections :: Maybe [(Float, Float)] }
+                     worldDebugIntersections :: Maybe [Ray] }

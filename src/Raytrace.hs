@@ -9,6 +9,7 @@ import System.IO.Unsafe ( unsafePerformIO )
 
 import Data.Maybe ( mapMaybe, isJust )
 import GHC.Float ( float2Double, double2Float )
+import Data.Bifunctor ( Bifunctor(bimap) )
 
 import Linear.V4 ( vector )
 import Linear.Metric ( Metric(signorm, dot, norm), normalize )
@@ -52,8 +53,8 @@ closestIntersection ray objects = foldr bestHitTime Nothing objectHitTimes
 shadowed :: [Object] -> Ray -> Bool 
 shadowed objects ray = any (isJust . getHitTime ray) objects
 
-objectColourUnderLight :: [Object] -> Object -> Point -> Point -> Vec4 -> Light -> Maybe Colour
-objectColourUnderLight objects obj eyeOC intersectionOC normalOC light = if shadowed objects rayToLight then Nothing else Just colour
+objectColourUnderLight :: [Object] -> Object -> Ray -> Ray -> Light -> Maybe Colour
+objectColourUnderLight objects obj ray@(eyeWC, rayDirWC) reflectedRay@(intersectionWC, reflectDirWC) light = if shadowed objects rayToLight then Nothing else Just colour
 -- objectColourUnderLight objects obj eyeOC intersectionOC normalOC light = Just colour
     where
         (Properties objDens 
@@ -68,17 +69,20 @@ objectColourUnderLight objects obj eyeOC intersectionOC normalOC light = if shad
 
         objM = objMat obj
         objMInv = objMatInv obj
-        
-        vectorToLightOC = (objMInv !* lightPos light) ^-^ intersectionOC
-        lightDistance = norm vectorToLightOC
-        lightDirOC = normalize vectorToLightOC
-        reflectDirOC = normalize $ reflect (lightDirOC) normalOC
-        viewDirOC = normalize $ intersectionOC ^-^ eyeOC
-        intersectionWC = objM !* (intersectionOC ^+^ (normalOC ^* epsilon))
-        rayToLight = (intersectionWC, (normalize $ objM !* lightDirOC))
 
-        diffuseIntensity = clampUnit $ lightDirOC `dot` normalOC
-        specularIntensity = (** (objF / 4.0)) . clampUnit $ reflectDirOC `dot` viewDirOC
+        intersectionOC = objMInv !* intersectionWC
+        normalOC = (objNormal obj) $ intersectionOC
+        normalWC = normalize $ objM !* normalOC
+        vectorToLightWC = lightPos light ^-^ intersectionWC
+        lightDistance = norm vectorToLightWC
+        lightDirWC = normalize vectorToLightWC
+        reflectDirWC = normalize $ reflect (lightDirWC) normalWC
+
+        viewDirWC = -rayDirWC
+        rayToLight = (intersectionWC, lightDirWC)
+
+        diffuseIntensity = clampUnit $ lightDirWC `dot` normalWC
+        specularIntensity = (** (objF / 4.0)) . clampUnit $ reflectDirWC `dot` viewDirWC
         lightModifier = (lightColour light) * (lightIntensity light) ^/ (lightDistance * lightDistance)
         colour = lightModifier * objAmbRGBA +
                  lightModifier * (diffuseIntensity *^ objDiffRGBA) + 
@@ -87,31 +91,36 @@ objectColourUnderLight objects obj eyeOC intersectionOC normalOC light = if shad
 reflect :: Vec4 -> Vec4 -> Vec4
 reflect incident normal = incident ^-^ (normal ^* (2.0 * incident `dot` normal))
 
+reflectRay :: Object -> Double -> Ray -> Ray
+reflectRay obj hitTime ray@(eyeWC, rayDirWC) = (intersectionWC', reflectDirWC)
+    where
+        m = objMatInv obj
+        mInv = objMatInv obj
+
+        intersectionWC = eyeWC ^+^ rayDirWC ^* hitTime
+        intersectionOC = mInv !* intersectionWC
+        normalOC = (objNormal obj) intersectionOC
+
+        normalWC = m !* normalOC
+        reflectDirWC = normalize $ reflect rayDirWC normalWC
+        intersectionWC' = intersectionWC ^+^ normalWC ^* epsilon
+
 trace :: Int -> World -> Ray -> Colour
-trace bounces world@(World _ _ _ _ objects lights _ _) ray@(eye, rayDir)
+trace bounces world@(World _ _ _ _ objects lights _ _) ray@(eyeWC, rayDirWC)
     | bounces == configBounces defaultConfig        = zero
     | otherwise                                     =
         let closestObj = closestIntersection ray objects in
         case closestObj of
             Nothing             -> zero
             Just (obj, hitTime) -> 
-                let ambCoeff = propAmbCoeff $ objProps obj
+                let reflectedRay@(intersectionWC, rayDirWC') = reflectRay obj hitTime ray
+                    
+                    ambCoeff = propAmbCoeff $ objProps obj
                     ambRGBA = propAmbColour $ objProps obj
                     objReflectivity = propReflectivity $ objProps obj
-                    objM = objMat obj
-                    objMInv = objMatInv obj
-
-                    eyeOC = objMInv !* eye
-                    rayDirOC = normalize $ objMInv !* rayDir
-                    intersectionOC = eyeOC ^+^ rayDirOC ^* hitTime
-                    normalOC = (objNormal obj) intersectionOC
-                    totalLightColour = sum $ mapMaybe (objectColourUnderLight objects obj eyeOC intersectionOC normalOC) [lights]
+                    totalLightColour = sum $ mapMaybe (objectColourUnderLight objects obj ray reflectedRay) [lights]
                     colourBeforeReflection = (ambCoeff *^ ambRGBA) ^+^ totalLightColour
-
-                    reflectionVectorOC = reflect intersectionOC normalOC
-                    reflectionVectorWC = normalize $ objM !* reflectionVectorOC
-                    intersectionWC = (objM !* intersectionOC) ^+^ (objM !* normalOC ^* epsilon) -- look here tomorrow
-                    reflectionColour = trace (bounces + 1) world (intersectionWC, reflectionVectorWC)
+                    reflectionColour = trace (bounces + 1) world reflectedRay
 
                     colour = 
                         if objReflectivity > 0.0 then
@@ -132,8 +141,8 @@ shade world@(World _ wWidth wHeight _ _ _ _ _) point@(x, y) = colourVecToGloss $
         ray = getFirstRay world (windowX, windowY)
 
 
-debugRayPoints :: Int -> World -> Ray -> [(Float, Float)]
-debugRayPoints bounces world@(World _ _ _ camera objects _ _ _) ray@(eye, rayDir)
+debugRays :: Int -> World -> Ray -> [Ray]
+debugRays bounces world@(World _ _ _ camera objects _ _ _) ray@(eye, rayDir)
     | bounces == configBounces defaultConfig = []
     | otherwise                              = 
         let closestObj = closestIntersection ray objects in
@@ -141,56 +150,26 @@ debugRayPoints bounces world@(World _ _ _ camera objects _ _ _) ray@(eye, rayDir
             Nothing             -> []
             Just (obj, hitTime) -> 
                 let objReflectivity = propReflectivity $ objProps obj
-                    objM = objMat obj
-                    objMInv = objMatInv obj
-
-                    eyeOC = objMInv !* eye
-                    rayDirOC = normalize $ objMInv !* rayDir
-                    intersectionOC = eyeOC ^+^ rayDirOC ^* hitTime
-                    normalOC = (objNormal obj) intersectionOC
-
-                    reflectionVectorOC = reflect intersectionOC normalOC
-                    reflectionVectorWC = normalize $ objM !* reflectionVectorOC
-                    intersectionWC = (objM !* intersectionOC) ^+^ (objM !* normalOC ^* epsilon) -- look here tomorrow
-                    reflections = debugRayPoints (bounces + 1) world (intersectionWC, reflectionVectorWC)
-
-                    intersectionPixel = cameraProject camera intersectionWC
+                    reflectedRay = reflectRay obj hitTime ray
+                    reflections = debugRays (bounces + 1) world reflectedRay
                 in
                     if objReflectivity > 0.0 then
-                        intersectionPixel:reflections
+                        reflectedRay:reflections
                     else
-                        [intersectionPixel]
+                        [reflectedRay]
 
--- debugRay :: World -> G.Point -> Maybe G.Color
--- debugRay world@(World time wWidth wHeight camera objects lights clickPos _) point@(x, y) =
---     case clickPos of
---         Just pos@(posX, posY) -> 
---             let 
---                 threshold = 0.01
---                 closeTo (x1, y1) (x2, y2) = abs(x2 - x1) < threshold && abs(y2 - y1) < threshold
---                 windowPoint = (x * wWidth + wWidth / 2.0, y * wHeight + wHeight / 2.0)
---                 actualPos = (posX + wWidth / 2.0, posY + wHeight / 2.0)
---                 ray = getFirstRay world actualPos
---                 intersections = debugRayPoints 0 world ray
---             in
---                 unsafePerformIO $ do
---                     putStrLn (show intersections)
---                     return $
---                         if any (closeTo windowPoint) intersections then 
---                             Just $ colourVecToGloss $ colour 0 255 0 255
---                         else
---                             Nothing
---         Nothing -> Nothing
-
-debugRay :: World -> G.Point -> Maybe G.Color
-debugRay world@(World time wWidth wHeight camera _ _ _ debugIntersections) point@(x, y) =
+drawDebugRays :: World -> G.Point -> Maybe G.Color
+drawDebugRays world@(World time wWidth wHeight camera _ _ _ debugIntersections) point@(x, y) =
     case debugIntersections of
         Just intersections ->
             let threshold = 1.0
                 closeTo (x1, y1) (x2, y2) = abs(x2 - x1) < threshold && abs(y2 - y1) < threshold
                 windowPoint = ((x/2.0 + 0.5) * wWidth, (y/2.0 + 0.5) * wHeight)
+                rayToPixels (eye, dir) = [project eye, project $ eye ^+^ (dir ^* 0.25)]
+                project = cameraProject camera
+                pointsToDraw = concatMap rayToPixels intersections
             in
-                if any (closeTo windowPoint) intersections then 
+                if any (closeTo windowPoint) pointsToDraw then 
                     Just $ colourVecToGloss $ colour 0 255 0 255
                 else
                     Nothing
@@ -199,6 +178,56 @@ debugRay world@(World time wWidth wHeight camera _ _ _ debugIntersections) point
 
 debugAndTrace :: World -> G.Point -> G.Color
 debugAndTrace world point =
-    case debugRay world point of
+    case drawDebugRays world point of
         Just colour -> colour
         otherwise   -> shade world point
+
+-- debugRayPoints :: Int -> World -> Ray -> [(Float, Float)]
+-- debugRayPoints bounces world@(World _ _ _ camera objects _ _ _) ray@(eye, rayDir)
+--     | bounces == configBounces defaultConfig = []
+--     | otherwise                              = 
+--         let closestObj = closestIntersection ray objects in
+--         case closestObj of
+--             Nothing             -> []
+--             Just (obj, hitTime) -> 
+--                 let objReflectivity = propReflectivity $ objProps obj
+--                     objM = objMat obj
+--                     objMInv = objMatInv obj
+
+--                     eyeOC = objMInv !* eye
+--                     rayDirOC = normalize $ objMInv !* rayDir
+--                     intersectionOC = eyeOC ^+^ rayDirOC ^* hitTime
+--                     normalOC = (objNormal obj) intersectionOC
+
+--                     reflectionVectorOC = reflect intersectionOC normalOC
+--                     reflectionVectorWC = normalize $ objM !* reflectionVectorOC
+--                     intersectionWC = (objM !* intersectionOC) ^+^ (objM !* normalOC ^* epsilon) -- look here tomorrow
+--                     reflections = debugRayPoints (bounces + 1) world (intersectionWC, reflectionVectorWC)
+
+--                     intersectionPixel = cameraProject camera intersectionWC
+--                 in
+--                     if objReflectivity > 0.0 then
+--                         intersectionPixel:reflections
+--                     else
+--                         [intersectionPixel]
+
+-- debugRay :: World -> G.Point -> Maybe G.Color
+-- debugRay world@(World time wWidth wHeight camera _ _ _ debugIntersections) point@(x, y) =
+--     case debugIntersections of
+--         Just intersections ->
+--             let threshold = 1.0
+--                 closeTo (x1, y1) (x2, y2) = abs(x2 - x1) < threshold && abs(y2 - y1) < threshold
+--                 windowPoint = ((x/2.0 + 0.5) * wWidth, (y/2.0 + 0.5) * wHeight)
+--             in
+--                 if any (closeTo windowPoint) intersections then 
+--                     Just $ colourVecToGloss $ colour 0 255 0 255
+--                 else
+--                     Nothing
+--         Nothing -> Nothing
+
+
+-- debugAndTrace :: World -> G.Point -> G.Color
+-- debugAndTrace world point =
+--     case debugRay world point of
+--         Just colour -> colour
+--         otherwise   -> shade world point

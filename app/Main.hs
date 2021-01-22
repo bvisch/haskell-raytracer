@@ -104,7 +104,7 @@ handleEvent event world
             wHeight = worldWindowHeight world
             actualPos = (x + wWidth / 2.0, y + wHeight / 2.0)
             ray = getFirstRay world actualPos
-            intersections = debugRayPoints 0 world ray
+            intersections = debugRays 0 world ray
             world'' =  world' { worldDebugIntersections = Just $ intersections }
           in
               unsafePerformIO $ do
