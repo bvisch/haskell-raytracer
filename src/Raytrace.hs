@@ -9,7 +9,7 @@ import System.IO.Unsafe ( unsafePerformIO )
 
 import Data.Maybe ( mapMaybe, isJust )
 import GHC.Float ( float2Double, double2Float )
-import Data.Bifunctor ( Bifunctor(bimap) )
+import Data.Bifunctor ( Bifunctor(bimap), first )
 
 import Linear.V4 ( vector )
 import Linear.Metric ( Metric(signorm, dot, norm), normalize )
@@ -50,11 +50,14 @@ closestIntersection ray objects = foldr bestHitTime Nothing objectHitTimes
     where
         objectHitTimes = zip objects $ map (getHitTime ray) objects
 
-shadowed :: [Object] -> Ray -> Bool 
-shadowed objects ray = any (isJust . getHitTime ray) objects
+shadowed :: [Object] -> Ray -> Double -> Bool 
+shadowed objects ray distanceToLight = any (< distanceToLight) hitTimes
+    where
+        hitTimes = mapMaybe (getHitTime ray) objects
+
 
 objectColourUnderLight :: [Object] -> Object -> Ray -> Ray -> Light -> Maybe Colour
-objectColourUnderLight objects obj ray@(eyeWC, rayDirWC) reflectedRay@(intersectionWC, reflectDirWC) light = if shadowed objects rayToLight then Nothing else Just colour
+objectColourUnderLight objects obj ray@(eyeWC, rayDirWC) reflectedRay@(intersectionWC, reflectDirWC) light = if shadowed objects rayToLight lightDistance then Nothing else Just colour
 -- objectColourUnderLight objects obj eyeOC intersectionOC normalOC light = Just colour
     where
         (Properties objDens 
@@ -141,8 +144,8 @@ shade world@(World _ wWidth wHeight _ _ _ _ _) point@(x, y) = colourVecToGloss $
         ray = getFirstRay world (windowX, windowY)
 
 
-debugRays :: Int -> World -> Ray -> [Ray]
-debugRays bounces world@(World _ _ _ camera objects _ _ _) ray@(eye, rayDir)
+debugRays :: Int -> World -> Ray -> [(Point, Colour)]
+debugRays bounces world@(World _ _ _ camera objects light _ _) ray@(eye, rayDir)
     | bounces == configBounces defaultConfig = []
     | otherwise                              = 
         let closestObj = closestIntersection ray objects in
@@ -150,27 +153,41 @@ debugRays bounces world@(World _ _ _ camera objects _ _ _) ray@(eye, rayDir)
             Nothing             -> []
             Just (obj, hitTime) -> 
                 let objReflectivity = propReflectivity $ objProps obj
-                    reflectedRay = reflectRay obj hitTime ray
+                    reflectedRay@(intersectionWC, reflectDirWC) = reflectRay obj hitTime ray
                     reflections = debugRays (bounces + 1) world reflectedRay
+                    lightDirWC = normalize $ (lightPos light) ^-^ intersectionWC
+                    rayToLight = (intersectionWC, lightDirWC)
+
+                    project = cameraProject camera
+                    intersectionPoint = (intersectionWC, white)
+                    reflectionPoint = (intersectionWC ^+^ reflectDirWC ^* 0.25, green)
+                    lightDirPoint = (intersectionWC ^+^ lightDirWC ^* 0.25, yellow)
+                    shadowPoint = 
+                        case closestIntersection rayToLight objects of
+                            Nothing                -> Nothing
+                            Just (_, blockHitTime) -> Just (intersectionWC ^+^ lightDirWC ^* blockHitTime, cyan)
+                    pointsToDraw = case shadowPoint of
+                                        Nothing -> [intersectionPoint, reflectionPoint, lightDirPoint]
+                                        Just point -> [intersectionPoint, reflectionPoint, lightDirPoint, point]
                 in
                     if objReflectivity > 0.0 then
-                        reflectedRay:reflections
+                        pointsToDraw ++ reflections
                     else
-                        [reflectedRay]
+                        pointsToDraw
 
 drawDebugRays :: World -> G.Point -> Maybe G.Color
 drawDebugRays world@(World time wWidth wHeight camera _ _ _ debugIntersections) point@(x, y) =
     case debugIntersections of
         Just intersections ->
             let threshold = 1.0
-                closeTo (x1, y1) (x2, y2) = abs(x2 - x1) < threshold && abs(y2 - y1) < threshold
+                closeTo (x1, y1) ((x2, y2), _) = abs(x2 - x1) < threshold && abs(y2 - y1) < threshold
                 windowPoint = ((x/2.0 + 0.5) * wWidth, (y/2.0 + 0.5) * wHeight)
-                rayToPixels (eye, dir) = [project eye, project $ eye ^+^ (dir ^* 0.25)]
-                project = cameraProject camera
-                pointsToDraw = concatMap rayToPixels intersections
+                project = first $ cameraProject camera
+                intersectionPixels = map project intersections
+                pointsToDraw = filter (closeTo windowPoint) intersectionPixels
             in
-                if any (closeTo windowPoint) pointsToDraw then 
-                    Just $ colourVecToGloss $ colour 0 255 0 255
+                if length pointsToDraw > 0 then 
+                    Just . colourVecToGloss . snd . head $ pointsToDraw
                 else
                     Nothing
         Nothing -> Nothing

@@ -21,6 +21,7 @@ type Vec3 = V3 Double
 type Mat4 = M44 Double
 type Colour = Vec4
 type Ray = (Point, Vec4)
+type Pixel = ((Float, Float), Colour)
 
 
 
@@ -55,6 +56,27 @@ vec4ToVec3 (V4 x y z w) = V3 x y z
 
 colour :: Int -> Int -> Int -> Int -> Colour
 colour r g b a = V4 (fromIntegral r) (fromIntegral g) (fromIntegral b) (fromIntegral a)
+
+red :: Colour
+red = colour 255 0 0 255
+
+green :: Colour
+green = colour 0 255 0 255
+
+blue :: Colour
+blue = colour 0 0 255 255
+
+magenta :: Colour
+magenta = colour 255 0 255 255
+
+cyan :: Colour
+cyan = colour 0 255 255 255
+
+yellow :: Colour
+yellow = colour 255 255 0 255
+
+white :: Colour
+white = colour 255 255 255 255
 
 epsilon :: Double
 epsilon = 0.0001

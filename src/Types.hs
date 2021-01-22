@@ -1,6 +1,6 @@
 module Types where
 
-import Lib ( Colour, Mat4, Point, Ray, Vec3, Vec4 )
+import Lib ( Colour, Mat4, Point, Ray, Vec3, Vec4, Pixel )
 import qualified Graphics.Gloss as G
 
 data Properties = Properties { propDensity :: Double,
@@ -50,4 +50,4 @@ data World = World { worldTime :: Double,
                      worldObjects :: [Object],
                      worldLight :: Light,
                      worldClickPos :: Maybe G.Point,
-                     worldDebugIntersections :: Maybe [Ray] }
+                     worldDebugIntersections :: Maybe [(Point, Colour)] }
