@@ -13,7 +13,7 @@ import Linear.V4 ( V4(V4), _xyz, _x, _y, _z, _w )
 import Linear.Matrix ( (!*), (!*!), inv44 )
 import Linear.Vector ( Additive((^-^)), (^/), (*^) )
 import Linear.Metric ( Metric(dot), normalize )
-import Linear.Projection
+import Linear.Projection ( lookAt, frustum )
 
 buildCamera :: Point -> Point -> Camera
 buildCamera eye g = Camera eye g u v n near nearWidth nearHeight viewMat frustumMat screenMat cameraMat
@@ -24,11 +24,7 @@ buildCamera eye g = Camera eye g u v n near nearWidth nearHeight viewMat frustum
         u = normalize $ cross up n
         v = normalize $ cross n u
 
-        -- viewMat = lookAt (eye ^. _xyz) (g ^. _xyz) up
-        viewMat = V4 (V4 (u^._x) (u^._y) (u^._z) ((-1.0 *^ eye^._xyz) `dot` u))
-                     (V4 (v^._x) (v^._y) (v^._z) ((-1.0 *^ eye^._xyz) `dot` v))
-                     (V4 (n^._x) (n^._y) (n^._z) ((-1.0 *^ eye^._xyz) `dot` n))
-                     (V4    0       0       0       1)
+        viewMat = lookAt (eye ^. _xyz) (g ^. _xyz) up
         theta = viewAngle
         t = near * tan (pi / 180.0 * theta / 2)
         b = -t
