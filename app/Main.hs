@@ -29,7 +29,7 @@ initialWorld = World { worldTime = 0.0,
         colour1 = colour 255 25 80 255
         colour2 = colour 0 0 255 255
         sphere1Props = Properties { propDensity = 1.0,
-                                    propReflectivity = 0.5,
+                                    propReflectivity = 0.0,
                                     propSpecCoeff = 0.02,
                                     propDiffCoeff = 0.68,
                                     propAmbCoeff = 0.3, 
@@ -38,7 +38,7 @@ initialWorld = World { worldTime = 0.0,
                                     propAmbColour = colour1,
                                     propF = 10.0 }
         planeProps = Properties { propDensity = 1.0,
-                                  propReflectivity = 0.5,
+                                  propReflectivity = 0.0,
                                   propSpecCoeff = 0.2,
                                   propDiffCoeff = 0.4,
                                   propAmbCoeff = 0.4, 
@@ -104,11 +104,11 @@ handleEvent event world
             wHeight = worldWindowHeight world
             actualPos = (x + wWidth / 2.0, y + wHeight / 2.0)
             ray = getFirstRay world actualPos
-            intersections = debugRayPoints 0 world' ray
+            intersections = debugRayPoints 0 world ray
             world'' =  world' { worldDebugIntersections = Just $ intersections }
           in
               unsafePerformIO $ do
-                  print intersections
+                  print actualPos
                   return $
                     world''
 

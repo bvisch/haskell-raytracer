@@ -9,9 +9,9 @@ import GHC.Float ( double2Float )
 import Control.Lens
 
 import Linear.V3 ( V3(V3), cross )
-import Linear.V4 ( V4(V4), _xyz, _w )
+import Linear.V4 ( V4(V4), _xyz, _x, _y, _z, _w )
 import Linear.Matrix ( (!*), (!*!), inv44 )
-import Linear.Vector ( Additive((^-^)), (^/) )
+import Linear.Vector ( Additive((^-^)), (^/), (*^) )
 import Linear.Metric ( Metric(dot), normalize )
 import Linear.Projection
 
@@ -20,11 +20,15 @@ buildCamera eye g = Camera eye g u v n near nearWidth nearHeight viewMat frustum
     where
         (Config near far nearWidth nearHeight windowWidth windowHeight viewAngle aspectRatio _ _ _ _) = defaultConfig 
         up = V3 0.0 0.0 1.0
-        n = vec4ToVec3 $ normalize $ eye ^-^ g
+        n = normalize $ (eye^._xyz) ^-^ (g^._xyz)
         u = normalize $ cross up n
         v = normalize $ cross n u
 
-        viewMat = lookAt (eye ^. _xyz) (g ^. _xyz) up
+        -- viewMat = lookAt (eye ^. _xyz) (g ^. _xyz) up
+        viewMat = V4 (V4 (u^._x) (u^._y) (u^._z) ((-1.0 *^ eye^._xyz) `dot` u))
+                     (V4 (v^._x) (v^._y) (v^._z) ((-1.0 *^ eye^._xyz) `dot` v))
+                     (V4 (n^._x) (n^._y) (n^._z) ((-1.0 *^ eye^._xyz) `dot` n))
+                     (V4    0       0       0       1)
         theta = viewAngle
         t = near * tan (pi / 180.0 * theta / 2)
         b = -t
@@ -33,8 +37,8 @@ buildCamera eye g = Camera eye g u v n near nearWidth nearHeight viewMat frustum
         frustumMat = frustum l r b t near far
         w = (fromIntegral windowWidth) / 2.0
         h = (fromIntegral windowHeight) / 2.0
-        screenMat = V4 (V4  w  0.0 0.0 1.0)
-                       (V4 0.0  h  0.0 1.0)
+        screenMat = V4 (V4  w  0.0 0.0  w )
+                       (V4 0.0  h  0.0  h )
                        (V4 0.0 0.0 1.0 0.0)
                        (V4 0.0 0.0 0.0 1.0)
 

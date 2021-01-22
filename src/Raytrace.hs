@@ -23,7 +23,7 @@ getFirstRay (World time wWidth wHeight camera objs lights _ _) (windowX,windowY)
         near = cameraNear camera
         nearWidth = cameraNearWidth camera
         nearHeight = cameraNearHeight camera
-        rayDir = normalize $ vector $ -1.0 * near *^ (cameraN camera) ^+^ 
+        rayDir = normalize $ vector $ -near *^ (cameraN camera) ^+^ 
             nearWidth * (2.0 * (float2Double windowX) / (float2Double wWidth) - 1.0) *^ (cameraU camera) ^+^ 
             nearHeight * (2.0 * (float2Double windowY) / (float2Double wHeight) - 1.0) *^ (cameraV camera)
         eye = cameraEye camera
@@ -127,8 +127,8 @@ shade world@(World _ wWidth wHeight _ _ _ _ _) point@(x, y) = colourVecToGloss $
     where
         aspect = wWidth / wHeight
         fov = fromIntegral $ configFov defaultConfig
-        windowX = x * wWidth + wWidth / 2
-        windowY = y * wHeight + wHeight / 2
+        windowX = (x/2.0 + 0.5) * wWidth
+        windowY = (y/2.0 + 0.5) * wHeight
         ray = getFirstRay world (windowX, windowY)
 
 
@@ -188,7 +188,7 @@ debugRay world@(World time wWidth wHeight camera _ _ _ debugIntersections) point
         Just intersections ->
             let threshold = 1.0
                 closeTo (x1, y1) (x2, y2) = abs(x2 - x1) < threshold && abs(y2 - y1) < threshold
-                windowPoint = (x * wWidth + wWidth / 2.0, y * wHeight + wHeight / 2.0)
+                windowPoint = ((x/2.0 + 0.5) * wWidth, (y/2.0 + 0.5) * wHeight)
             in
                 if any (closeTo windowPoint) intersections then 
                     Just $ colourVecToGloss $ colour 0 255 0 255
